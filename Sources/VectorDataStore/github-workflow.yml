@@ -1,0 +1,169 @@
+#
+//  workflow.yml
+//  VectorDataStore
+//
+//  Created by Nicholas Reich on 10/24/25.
+//
+
+
+name: VectorDataStore CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  SWIFT_VERSION: '6.2'
+
+jobs:
+  # Run tests on multiple platforms
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-latest]
+        include:
+          - os: macos-14
+            platform: macOS
+          - os: ubuntu-latest
+            platform: Linux
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift (macOS)
+      if: matrix.os == 'macos-14'
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: ${{ env.SWIFT_VERSION }}
+    
+    - name: Setup Swift (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: ${{ env.SWIFT_VERSION }}
+    
+    - name: Cache Swift packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          .build
+          ~/Library/Caches/org.swift.swiftpm
+        key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+    
+    - name: Build
+      run: swift build -v
+    
+    - name: Run tests
+      run: swift test --enable-swift-testing --enable-code-coverage
+    
+    - name: Generate coverage report (macOS only)
+      if: matrix.os == 'macos-14'
+      run: |
+        xcrun llvm-cov export -format="lcov" \
+          .build/debug/VectorDataStorePackageTests.xctest/Contents/MacOS/VectorDataStorePackageTests \
+          -instr-profile .build/debug/codecov/default.profdata > coverage.lcov
+    
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'macos-14'
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage.lcov
+        flags: unittests
+        name: codecov-${{ matrix.os }}
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+  
+  # Lint code quality
+  lint:
+    name: SwiftLint
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install SwiftLint
+      run: brew install swiftlint
+    
+    - name: Run SwiftLint
+      run: swiftlint lint --strict --reporter github-actions-logging
+  
+  # Build documentation
+  docs:
+    name: Build Documentation
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: ${{ env.SWIFT_VERSION }}
+    
+    - name: Build documentation
+      run: |
+        swift package generate-documentation --target VectorDataStore
+  
+  # Integration test with real Qdrant (optional)
+  integration-test:
+    name: Integration Tests with Qdrant
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "curl -f http://localhost:6333/readyz || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: ${{ env.SWIFT_VERSION }}
+    
+    - name: Wait for Qdrant
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:6333/readyz; do sleep 2; done'
+    
+    - name: Run integration tests
+      env:
+        QDRANT_ENDPOINT: http://localhost:6333
+      run: swift test --filter IntegrationTests
+  
+  # Release job (triggered on tags)
+  release:
+    name: Create Release
+    runs-on: macos-14
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, lint, docs]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
