@@ -8,7 +8,7 @@ import Foundation
 import SwiftData
 
 
-/ MARK: - SwiftDataBackend Implementation -------------------------------------
+// MARK: - SwiftDataBackend Implementation -------------------------------------
 
 /// Local persistence backend using SwiftData
 /// Provides on-device vector storage for iOS/macOS apps

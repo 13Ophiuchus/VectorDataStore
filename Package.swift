@@ -32,7 +32,6 @@ let package = Package(
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "NIO", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
-				.product(name: "Logging", package: "swift-log"),
 				.product(name: "Crypto", package: "swift-crypto")
 			],
 			path: "Sources/VectorDataStore",
