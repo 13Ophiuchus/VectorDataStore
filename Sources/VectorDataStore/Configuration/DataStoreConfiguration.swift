@@ -1,18 +1,10 @@
 //
 //  DataStoreConfiguration.swift
-//  MyLibrary
+//  VectorDataStore
 //
 //  Created by Nicholas Reich on 10/21/25.
 //
 
-
-//
-//  DataStore.swift
-//  AgentOS
-//
-//  Created by AgentOS on 2025
-//  Copyright © 2025 AgenticOS. All rights reserved.
-//
 
 import Foundation
 import CoreML
