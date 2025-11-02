@@ -12,7 +12,7 @@ import FoundationNetworking
 
 	/// Qdrant vector database backend implementation
 	/// Supports both REST API and self-hosted Qdrant instances
-public final class QdrantBackend<Vector: VectorProtocol>: VectorDBBackend where Vector == [Float] {
+public final class QdrantBackend<Vector: VectorProtocol>: VectorDBBackend {
 
 	private let endpoint: URL
 	private let apiKey: String?

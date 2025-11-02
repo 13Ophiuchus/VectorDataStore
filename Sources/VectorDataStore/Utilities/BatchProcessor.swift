@@ -6,7 +6,6 @@
 //
 
 
-/ MARK: - Batch Size Limiter --------------------------------------------------
 
 /// Helper to batch large operations
 public struct BatchProcessor {

@@ -5,8 +5,8 @@
 //  Created by Nicholas Reich on 10/24/25.
 //
 import SwiftData
+import Foundation
 
-// MARK: - Retry Logic Helper --------------------------------------------------
 
 /// Retry policy for network operations
 public actor RetryPolicy {

@@ -22,7 +22,8 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
 		.package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.1"),
 		.package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.4"),
-		.package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.0")
+		.package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.0"),
+		.package(url: "https://github.com/vapor/vapor.git", from: "4.89.0"),
 	],
 	targets: [
 		// Core modules
@@ -32,7 +33,8 @@ let package = Package(
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "NIO", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
-				.product(name: "Crypto", package: "swift-crypto")
+				.product(name: "Crypto", package: "swift-crypto"),
+				.product(name: "Vapor", package: "vapor")
 			],
 			path: "Sources/VectorDataStore",
 			swiftSettings: [

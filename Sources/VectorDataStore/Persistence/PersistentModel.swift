@@ -5,7 +5,6 @@
 //  Created by Nicholas Reich on 10/21/25.
 //
 
-
 //  swift-tools-version:6.0
 //  SwiftDataStyleVectorStore.swift
 //  Re-implements requested SwiftData surface area atop our VectorDataStore.
@@ -18,6 +17,8 @@ import Foundation
 /// but by the vector DB;  still we give them `PersistentIdentifier`,
 /// snapshotting, migration, etc.
 public protocol PersistentModel: VectorModel, Codable, Sendable {
+    /// Current schema version for this model type.
+    static var schemaVersion: Int { get }
     /// Called by the migration plan to upgrade an outdated payload.
     static func migrate(_ old: [String: Any], from version: Int) -> Self?
 }
@@ -62,35 +63,44 @@ public protocol SchemaMigrationPlan: Sendable {
 }
 
 // MARK: - Requests / Results --------------------------------------------------
+public struct Predicate: Sendable {
+    public enum Operation: Sendable {
+        case equal(key: String, value: String)
+        case contains(key: String, value: String)
+    }
 
-public struct DataStoreFetchRequest: Sendable {
-    public let predicate: NSPredicate?
-    public let fetchLimit: Int?
-    public let sortDescriptors: [SortDescriptor<String>]?
-    public let includePendingChanges: Bool
-    
-    // Vector-only additions
+    public let operation: Operation
+
+    public init(_ operation: Operation) {
+        self.operation = operation
+    }
+}
+
+public struct DataStoreFetchRequest<Model: VectorModel>: Sendable {
     public let semanticQuery: String?
+    public let fetchLimit: Int?
     public let similarityThreshold: Float?
-    
-    public init(predicate: NSPredicate? = nil,
-                fetchLimit: Int? = nil,
-                sortDescriptors: [SortDescriptor<String>]? = nil,
-                includePendingChanges: Bool = false,
-                semanticQuery: String? = nil,
-                similarityThreshold: Float? = nil) {
-        self.predicate = predicate
-        self.fetchLimit = fetchLimit
-        self.sortDescriptors = sortDescriptors
-        self.includePendingChanges = includePendingChanges
+    public let predicate: Predicate?
+	public let sortDescriptors: [SortDescriptor]?  // ← make generic over Model
+
+    public init(
+        semanticQuery: String? = nil,
+        fetchLimit: Int? = nil,
+        similarityThreshold: Float? = nil,
+        predicate: Predicate? = nil,
+		sortDescriptors: [SortDescriptor]? = nil   // ← make generic over Model
+    ) {
         self.semanticQuery = semanticQuery
+        self.fetchLimit = fetchLimit
         self.similarityThreshold = similarityThreshold
+        self.predicate = predicate
+        self.sortDescriptors = sortDescriptors
     }
 }
 
 public struct DataStoreFetchResult<Model: PersistentModel>: Sendable {
-    public let snapshots: [DefaultSnapshot<Model>]
-    public let count: Int { snapshots.count }
+	public let snapshots: [[DefaultSnapshot<Model>]]
+    public var count: Int { snapshots.count }
 }
 
 public struct DataStoreSaveChangesRequest<Model: PersistentModel>: Sendable {
@@ -107,7 +117,7 @@ public struct DataStoreSaveChangesResult: Sendable {
 
 /// Mirrors SwiftData’s `EditingTransaction` (but we do not need undo).
 public struct EditingState<Model: PersistentModel>: Sendable {
-    public enum ChangeKind { case insert, update, delete }
+    public enum ChangeKind : Sendable{ case insert, update, delete }
     public struct Change: Sendable {
         public let kind: ChangeKind
         public let snapshot: DefaultSnapshot<Model>
@@ -118,10 +128,9 @@ public struct EditingState<Model: PersistentModel>: Sendable {
     public mutating func delete(_ s: DefaultSnapshot<Model>) { changes.append(.init(kind: .delete, snapshot: s)) }
 }
 
-
 // MARK: - Sample concrete model ----------------------------------------------
 
-final class ResearchNote: PersistentModel, Codable, Equatable, Identifiable {
+struct ResearchNote: PersistentModel, Codable, Equatable, Identifiable {
     static var schemaVersion: Int { 2 }
     
     var id: String
@@ -134,7 +143,7 @@ final class ResearchNote: PersistentModel, Codable, Equatable, Identifiable {
         self.id = id; self.title = title; self.content = content
     }
     
-    required init?(metadata: [String: String]) {
+    init?(metadata: [String: String]) {
         guard let data = try? JSONSerialization.data(withJSONObject: metadata),
               let decoded = try? JSONDecoder().decode(ResearchNote.self, from: data)
         else { return nil }
