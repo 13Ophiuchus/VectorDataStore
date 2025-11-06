@@ -10,7 +10,7 @@
 //  Re-implements requested SwiftData surface area atop our VectorDataStore.
 
 import Foundation
-
+import SwiftData
 // MARK: - PersistentModel -----------------------------------------------------
 
 /// SwiftData-style model base. Conforming types are *not* backed by SQLite
