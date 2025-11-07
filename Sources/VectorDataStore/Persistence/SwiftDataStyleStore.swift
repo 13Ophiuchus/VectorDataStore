@@ -9,7 +9,7 @@ import SwiftData
 
 /// Actor that wraps the low-level `VectorDataStore` but exposes
 /// SwiftData-style request/result types.
-public actor SwiftDataStyleStore<Model: PersistentModel> {
+public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
     public typealias ModelType = Model
 
     public let config: DataStoreConfiguration<[Float]>

@@ -24,6 +24,7 @@ let package = Package(
 		.package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.4"),
 		.package(url: "https://github.com/apple/swift-syntax.git", from: "509.0.0"),
 		.package(url: "https://github.com/vapor/vapor.git", from: "4.89.0"),
+		.package(url: "https://github.com/outblock/flow-swift.git", from: "0.4.0")
 	],
 	targets: [
 		// Core modules
@@ -34,7 +35,8 @@ let package = Package(
 				.product(name: "NIO", package: "swift-nio"),
 				.product(name: "NIOHTTP1", package: "swift-nio"),
 				.product(name: "Crypto", package: "swift-crypto"),
-				.product(name: "Vapor", package: "vapor")
+				.product(name: "Vapor", package: "vapor"),
+				.product(name: "Flow", package: "flow-swift")
 			],
 			path: "Sources/VectorDataStore",
 			swiftSettings: [
@@ -45,9 +47,9 @@ let package = Package(
 		),
 		// Test targets
 		.testTarget(
-			name: "VectorDataStoreTests",
+			name: "AppTest",
 			dependencies: ["VectorDataStore"],
-			path: "Tests/VectorDataStoreTests"
+			path: "Tests/AppTest"
 		),
 	]
 )

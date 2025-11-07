@@ -16,7 +16,7 @@ import SwiftData
 /// SwiftData-style model base. Conforming types are *not* backed by SQLite
 /// but by the vector DB;  still we give them `PersistentIdentifier`,
 /// snapshotting, migration, etc.
-public protocol PersistentModel: VectorModel, Codable, Sendable {
+public protocol PersistentVectorModel: VectorModel, Codable, Sendable {
     /// Current schema version for this model type.
     static var schemaVersion: Int { get }
     /// Called by the migration plan to upgrade an outdated payload.
@@ -130,7 +130,7 @@ public struct EditingState<Model: PersistentModel>: Sendable {
 
 // MARK: - Sample concrete model ----------------------------------------------
 
-struct ResearchNote: PersistentModel, Codable, Equatable, Identifiable {
+struct ResearchNote: PersistentVectorModel, Codable, Equatable, Identifiable {
     static var schemaVersion: Int { 2 }
     
     var id: String
