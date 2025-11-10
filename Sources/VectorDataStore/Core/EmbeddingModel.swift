@@ -1,13 +1,10 @@
 //
 //  EmbeddingModel.swift
-//  MyLibrary
+//  VectorDataStore
 //
 //  Created by Nicholas Reich on 10/21/25.
 //
-
-
-// VectorDataStore.swift
-// Created for Swift 6 strict concurrency
+// 
 
 import Foundation
 
@@ -95,19 +92,15 @@ public protocol VectorModel: Sendable, Identifiable where ID: StringProtocol {
 //    func search(vector: Vector, topK: Int, threshold: Float?) async throws -> [[String: String]]
 //}
 
-/// Convenience wrapper so the store never sees raw vectors alone.
-public struct VectorPayload<Vector: VectorProtocol>: Sendable {
-    public let vector: Vector
-    public let metadata: [String: String]
-}
+
 
 // MARK: - Model helpers -------------------------------------------------------
 
-//extension VectorModel {
-//    /// Default mirror of Codable or custom dictionary.
-//    fileprivate var metadataRepresentation: [String: String] {
-//        let data = (try? JSONEncoder().encode(self)) ?? Data()
-//        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-//        return json?.compactMapValues { String(describing: $0) } ?? [:]
-//    }
-//}
+extension VectorModel {
+    /// Default mirror of Codable or custom dictionary.
+    fileprivate var metadataRepresentation: [String: String] {
+        let data = (try? JSONEncoder().encode(self)) ?? Data()
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return json?.compactMapValues { String(describing: $0) } ?? [:]
+    }
+}

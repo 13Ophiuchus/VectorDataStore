@@ -7,12 +7,9 @@
 //  Created by Nicholas Reich on 10/24/25.
 //
 import Foundation
-import SwiftData
-import Spatial
-import Vapor
 
 /// Updated QdrantBackend with retry logic and proper ID hashing
-public final class EnhancedQdrantBackend<Vector: VectorProtocol>: VectorDBBackend {
+public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: VectorDBBackend {
     private let endpoint: URL
     private let apiKey: String?
     private let collectionName: String
@@ -58,44 +55,73 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol>: VectorDBBacken
                 request.setValue(apiKey, forHTTPHeaderField: "api-key")
             }
 
-            // Use stable ID hashing
-            let points = payloads.map { payload in
+            // Build Qdrant points
+            let points: [[String: Any]] = payloads.map { payload in
                 let docId = payload.metadata["id"] ?? UUID().uuidString
                 let pointId = self.hashID(docId)
 
+                // Ensure vector encodes to JSON. If Vector is [Float], this works directly.
                 return [
                     "id": pointId,
                     "vector": payload.vector,
                     "payload": payload.metadata
-                ] as [String: Any]
+                ]
             }
 
             let upsertPayload: [String: Any] = ["points": points]
-
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: upsertPayload) else {
-                throw NSError(domain: "EnhancedQdrantBackend", code: -1)
-            }
-
+            let jsonData = try JSONSerialization.data(withJSONObject: upsertPayload)
             request.httpBody = jsonData
 
             let (data, response) = try await self.session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw NSError(domain: "EnhancedQdrantBackend", code: -1)
+                throw HTTPError(statusCode: -1)
             }
 
-            if httpResponse.statusCode != 200 {
-                let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            guard httpResponse.statusCode == 200 else {
+                // You may want to decode Qdrant error body here
+                _ = String(data: data, encoding: .utf8)
                 throw HTTPError(statusCode: httpResponse.statusCode)
             }
         }
     }
 
     public func search(vector: Vector, topK: Int, threshold: Float?) async throws -> [[String: String]] {
-        return try await retryPolicy.execute {
-            // Implementation same as QdrantBackend from Production-Backends.swift
-            // ... (reuse existing implementation)
-            return []
+        try await retryPolicy.execute {
+            let url = self.endpoint.appendingPathComponent("collections/\(self.collectionName)/points/search")
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let apiKey = self.apiKey {
+                request.setValue(apiKey, forHTTPHeaderField: "api-key")
+            }
+
+            var payload: [String: Any] = [
+                "vector": vector,
+                "limit": topK
+            ]
+            if let threshold { payload["score_threshold"] = threshold }
+
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+            let (data, response) = try await self.session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw HTTPError(statusCode: -1)
+            }
+            guard httpResponse.statusCode == 200 else {
+                throw HTTPError(statusCode: httpResponse.statusCode)
+            }
+
+            // Qdrant returns points with payloads — extract [String:String] payloads
+            struct QdrantSearchResponse: Decodable {
+                struct Point: Decodable {
+                    let payload: [String: String]?
+                }
+                let result: [Point]
+            }
+
+            let decoded = try JSONDecoder().decode(QdrantSearchResponse.self, from: data)
+            return decoded.result.compactMap { $0.payload }
         }
     }
 
@@ -112,24 +138,14 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol>: VectorDBBacken
 
             // Convert string IDs to hashed point IDs
             let pointIds = ids.map { self.hashID($0) }
+            let deletePayload: [String: Any] = ["points": pointIds]
+            request.httpBody = try JSONSerialization.data(withJSONObject: deletePayload)
 
-            let deletePayload: [String: Any] = [
-                "points": pointIds
-            ]
-
-            guard let jsonData = try? JSONSerialization.data(withJSONObject: deletePayload) else {
-                throw NSError(domain: "EnhancedQdrantBackend", code: -1)
-            }
-
-            request.httpBody = jsonData
-
-            let (data, response) = try await self.session.data(for: request)
-
+            let (_, response) = try await self.session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw NSError(domain: "EnhancedQdrantBackend", code: -1)
+                throw HTTPError(statusCode: -1)
             }
-
-            if httpResponse.statusCode != 200 {
+            guard httpResponse.statusCode == 200 else {
                 throw HTTPError(statusCode: httpResponse.statusCode)
             }
         }

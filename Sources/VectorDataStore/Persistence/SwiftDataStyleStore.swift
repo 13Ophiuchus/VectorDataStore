@@ -4,12 +4,14 @@
 //
 //  Created by Nicholas Reich on 10/24/25.
 //
+#if canImport(SwiftData)
+
 import Foundation
 import SwiftData
 
 /// Actor that wraps the low-level `VectorDataStore` but exposes
 /// SwiftData-style request/result types.
-public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
+public actor SwiftDataStyleStore<Model: PersistentModel> {
     public typealias ModelType = Model
 
     public let config: DataStoreConfiguration<[Float]>
@@ -34,7 +36,6 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
     // MARK: - Fetch
 
     public func execute(_ request: DataStoreFetchRequest<Model>) async throws -> DataStoreFetchResult<Model> {
-        // If semantic query exists, do vector search first
         if let query = request.semanticQuery {
             let vectorReq = DataStoreFetchRequest<Model>(
                 semanticQuery: query,
@@ -44,35 +45,28 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
             let models = try await vectorStore.execute(vectorReq)
             var snaps = models.map(DefaultSnapshot<Model>.init)
 
-            // Apply Predicate locally (vector DBs rarely support full NSPredicate)
             if let pred = request.predicate {
                 snaps = try snaps.filter { try evaluate(pred, with: $0.model) }
             }
 
-            // Apply sort descriptors
             if let sortDescriptors = request.sortDescriptors {
                 snaps = sort(snaps, by: sortDescriptors)
             }
 
             return DataStoreFetchResult(snapshots: [snaps])
         } else {
-            // Fallback: brute-force local scan (or add metadata filtering to backend)
-            // Access backend through internal property
             let allMetadata = try await getBackend().fetchAll()
             var models = allMetadata.compactMap(Model.init(metadata:))
 
-            // Apply predicate
             if let pred = request.predicate {
                 models = try models.filter { try evaluate(pred, with: $0) }
             }
 
-            // Apply sort descriptors
             var snaps = models.map(DefaultSnapshot<Model>.init)
             if let sortDescriptors = request.sortDescriptors {
                 snaps = sort(snaps, by: sortDescriptors)
             }
 
-            // Apply limit
             if let limit = request.fetchLimit {
                 snaps = Array(snaps.prefix(limit))
             }
@@ -83,7 +77,6 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
 
     // Helper to access backend (workaround for private access)
     private func getBackend() -> SwiftDataBackend<[Float]> {
-        // Use Mirror to access private backend property
         let mirror = Mirror(reflecting: vectorStore)
         guard let backendChild = mirror.children.first(where: { $0.label == "backend" }),
               let backend = backendChild.value as? SwiftDataBackend<[Float]> else {
@@ -98,7 +91,7 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
         case .equal(let key, let value):
             guard let modelValue = mirror(for: model, at: key) else { return false }
             return String(describing: modelValue) == value
-            
+
         case .contains(let key, let value):
             guard let modelValue = mirror(for: model, at: key) else { return false }
             let stringValue = String(describing: modelValue)
@@ -119,23 +112,18 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
     // MARK: - Save
 
     public func execute(_ request: DataStoreSaveChangesRequest<Model>) async throws -> DataStoreSaveChangesResult {
-        // Convert snapshots to models, then create request with models
         let models = request.snapshots.map(\.model)
         let modelRequest = DataStoreSaveChangesRequest<Model>(models.map(DefaultSnapshot<Model>.init))
         try await vectorStore.execute(modelRequest)
-        return .init(inserted: models.count, updated: 0) // naive
+        return .init(inserted: models.count, updated: 0)
     }
 
     // MARK: - Delete
 
-    /// Execute delete request
-    /// - Parameter ids: Array of document IDs to delete
     public func delete(ids: [String]) async throws {
         try await getBackend().delete(ids: ids)
     }
 
-    /// Delete snapshots
-    /// - Parameter snapshots: Snapshots to delete
     public func delete(_ snapshots: [DefaultSnapshot<Model>]) async throws {
         let ids = snapshots.map { String(describing: $0.model.id) }
         try await delete(ids: ids)
@@ -147,22 +135,18 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
         var state = EditingState<Model>()
         let value = try await body(&state)
 
-        // Apply changes in order: deletes first, then updates, then inserts
         let deletes = state.changes.filter { $0.kind == .delete }.map(\.snapshot)
         let updates = state.changes.filter { $0.kind == .update }.map(\.snapshot)
         let inserts = state.changes.filter { $0.kind == .insert }.map(\.snapshot)
 
-        // Process deletes
         if !deletes.isEmpty {
             try await delete(deletes)
         }
 
-        // Process updates
         if !updates.isEmpty {
             try await execute(DataStoreSaveChangesRequest(updates))
         }
 
-        // Process inserts
         if !inserts.isEmpty {
             try await execute(DataStoreSaveChangesRequest(inserts))
         }
@@ -172,7 +156,6 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
 
     // MARK: - Sorting Helpers
 
-    /// Helper to sort snapshots
     private func sort(
         _ snapshots: [DefaultSnapshot<Model>],
         by descriptors: [SortDescriptor]
@@ -200,35 +183,33 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
             return nil
         }
 
-        // Explicitly handle types to avoid 'any Comparable' issue
         switch (lhsValue, rhsValue) {
         case let (l as String, r as String):
             if l < r { return .orderedAscending }
             if l > r { return .orderedDescending }
             return .orderedSame
-            
+
         case let (l as Int, r as Int):
             if l < r { return .orderedAscending }
             if l > r { return .orderedDescending }
             return .orderedSame
-            
+
         case let (l as Double, r as Double):
             if l < r { return .orderedAscending }
             if l > r { return .orderedDescending }
             return .orderedSame
-            
+
         case let (l as Float, r as Float):
             if l < r { return .orderedAscending }
             if l > r { return .orderedDescending }
             return .orderedSame
-            
+
         case let (l as Date, r as Date):
             if l < r { return .orderedAscending }
             if l > r { return .orderedDescending }
             return .orderedSame
-            
+
         default:
-            // Fallback: compare as String
             let l = String(describing: lhsValue)
             let r = String(describing: rhsValue)
             if l < r { return .orderedAscending }
@@ -237,3 +218,5 @@ public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
         }
     }
 }
+
+#endif

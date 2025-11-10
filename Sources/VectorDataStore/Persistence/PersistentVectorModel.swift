@@ -10,8 +10,8 @@
 //  Re-implements requested SwiftData surface area atop our VectorDataStore.
 
 import Foundation
-import SwiftData
-// MARK: - PersistentModel -----------------------------------------------------
+
+// MARK: - PersistentVectorModel -----------------------------------------------------
 
 /// SwiftData-style model base. Conforming types are *not* backed by SQLite
 /// but by the vector DB;  still we give them `PersistentIdentifier`,
@@ -26,7 +26,7 @@ public protocol PersistentVectorModel: VectorModel, Codable, Sendable {
 // MARK: - PersistentIdentifier ----------------------------------------------
 
 /// Opaque, Sendable identifier (same shape as SwiftData’s).
-public struct PersistentIdentifier: Sendable, Hashable, CustomStringConvertible {
+public struct PersistentVectorIdentifier: Sendable, Hashable, CustomStringConvertible {
     public let url: URL                     // scheme = "vectorstore"
     public var description: String { url.absoluteString }
     public init?(urlString: String) {
@@ -44,7 +44,7 @@ public struct PersistentIdentifier: Sendable, Hashable, CustomStringConvertible 
 // MARK: - Snapshotting --------------------------------------------------------
 
 /// Immutable value of the model at a point in time.
-public struct DefaultSnapshot<Model: PersistentModel>: Sendable {
+public struct VectorSnapshot<Model: PersistentVectorModel>: Sendable {
     public let model: Model
     public let id: PersistentIdentifier
     public init(of model: Model) {
