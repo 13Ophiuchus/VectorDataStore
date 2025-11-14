@@ -46,10 +46,10 @@ public struct PersistentVectorIdentifier: Sendable, Hashable, CustomStringConver
 /// Immutable value of the model at a point in time.
 public struct VectorSnapshot<Model: PersistentVectorModel>: Sendable {
     public let model: Model
-    public let id: PersistentIdentifier
+    public let id: PersistentVectorIdentifier
     public init(of model: Model) {
         self.model = model
-        self.id = PersistentIdentifier(modelID: model.id, version: Model.schemaVersion)
+        self.id = PersistentVectorIdentifier(modelID: model.id, version: Model.schemaVersion)
     }
 }
 
@@ -57,7 +57,7 @@ public struct VectorSnapshot<Model: PersistentVectorModel>: Sendable {
 
 /// Describes how to move between schema versions.
 public protocol SchemaMigrationPlan: Sendable {
-    associatedtype Model: PersistentModel
+    associatedtype Model: PersistentVectorModel
     static var versions: [Int] { get }               // ascending
     static func migrate(_ payload: [String: Any], from: Int, to: Int) -> Model?
 }
@@ -81,14 +81,14 @@ public struct DataStoreFetchRequest<Model: VectorModel>: Sendable {
     public let fetchLimit: Int?
     public let similarityThreshold: Float?
     public let predicate: Predicate?
-	public let sortDescriptors: [SortDescriptor]?  // ← make generic over Model
+    public let sortDescriptors: [SortDescriptor]?  // ← make generic over Model
 
     public init(
         semanticQuery: String? = nil,
         fetchLimit: Int? = nil,
         similarityThreshold: Float? = nil,
         predicate: Predicate? = nil,
-		sortDescriptors: [SortDescriptor]? = nil   // ← make generic over Model
+        sortDescriptors: [SortDescriptor]? = nil   // ← make generic over Model
     ) {
         self.semanticQuery = semanticQuery
         self.fetchLimit = fetchLimit
@@ -98,14 +98,34 @@ public struct DataStoreFetchRequest<Model: VectorModel>: Sendable {
     }
 }
 
-public struct DataStoreFetchResult<Model: PersistentModel>: Sendable {
-	public let snapshots: [[DefaultSnapshot<Model>]]
+public struct DataStoreFetchResult<Model: PersistentVectorModel>: Sendable {
+    public let snapshots: [DefaultSnapshot<Model>]
     public var count: Int { snapshots.count }
 }
 
-public struct DataStoreSaveChangesRequest<Model: PersistentModel>: Sendable {
-    public let snapshots: [DefaultSnapshot<Model>]
-    public init(_ snapshots: [DefaultSnapshot<Model>]) { self.snapshots = snapshots }
+// Refactored to carry cross-platform Snapshot<Model>
+public struct DataStoreSaveChangesRequest<Model: PersistentVectorModel>: Sendable {
+    public let snapshots: [Snapshot<Model>]
+
+    /// Primary initializer taking cross-platform snapshots.
+    public init(_ snapshots: [Snapshot<Model>]) {
+        self.snapshots = snapshots
+    }
+
+    /// Convenience: accept DefaultSnapshot<Model> arrays (SwiftData-style).
+    public init(_ snapshots: [DefaultSnapshot<Model>]) {
+        self.snapshots = snapshots.map(Snapshot.init)
+    }
+
+    /// Convenience: accept VectorSnapshot<Model> arrays (lightweight).
+    public init(_ snapshots: [VectorSnapshot<Model>]) {
+        self.snapshots = snapshots.map(Snapshot.init)
+    }
+
+    /// Convenience: accept raw models (useful on server/Vapor).
+    public init(models: [Model]) {
+        self.snapshots = models.map { Snapshot(of: $0) }
+    }
 }
 
 public struct DataStoreSaveChangesResult: Sendable {
@@ -116,8 +136,8 @@ public struct DataStoreSaveChangesResult: Sendable {
 // MARK: - EditingState --------------------------------------------------------
 
 /// Mirrors SwiftData’s `EditingTransaction` (but we do not need undo).
-public struct EditingState<Model: PersistentModel>: Sendable {
-    public enum ChangeKind : Sendable{ case insert, update, delete }
+public struct EditingState<Model: PersistentVectorModel>: Sendable {
+    public enum ChangeKind: Sendable { case insert, update, delete }
     public struct Change: Sendable {
         public let kind: ChangeKind
         public let snapshot: DefaultSnapshot<Model>

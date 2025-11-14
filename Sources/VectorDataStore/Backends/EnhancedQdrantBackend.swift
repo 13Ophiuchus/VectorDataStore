@@ -8,8 +8,18 @@
 //
 import Foundation
 
+/// Qdrant search response model (file-scope to avoid nesting in generic closures)
+private struct QdrantSearchResponse: Decodable {
+    struct Point: Decodable {
+        let payload: [String: String]?
+    }
+    let result: [Point]
+}
+
 /// Updated QdrantBackend with retry logic and proper ID hashing
-public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: VectorDBBackend {
+public final class EnhancedQdrantBackend<V: VectorProtocol & Codable>: VectorDBBackend {
+    public typealias Vector = V
+
     private let endpoint: URL
     private let apiKey: String?
     private let collectionName: String
@@ -60,7 +70,6 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: Vect
                 let docId = payload.metadata["id"] ?? UUID().uuidString
                 let pointId = self.hashID(docId)
 
-                // Ensure vector encodes to JSON. If Vector is [Float], this works directly.
                 return [
                     "id": pointId,
                     "vector": payload.vector,
@@ -79,7 +88,6 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: Vect
             }
 
             guard httpResponse.statusCode == 200 else {
-                // You may want to decode Qdrant error body here
                 _ = String(data: data, encoding: .utf8)
                 throw HTTPError(statusCode: httpResponse.statusCode)
             }
@@ -112,14 +120,6 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: Vect
                 throw HTTPError(statusCode: httpResponse.statusCode)
             }
 
-            // Qdrant returns points with payloads — extract [String:String] payloads
-            struct QdrantSearchResponse: Decodable {
-                struct Point: Decodable {
-                    let payload: [String: String]?
-                }
-                let result: [Point]
-            }
-
             let decoded = try JSONDecoder().decode(QdrantSearchResponse.self, from: data)
             return decoded.result.compactMap { $0.payload }
         }
@@ -150,4 +150,13 @@ public final class EnhancedQdrantBackend<Vector: VectorProtocol & Codable>: Vect
             }
         }
     }
+
+    public func fetchAll() async throws -> [[String: String]] {
+        // TODO: Minimal stub; implement Qdrant scroll if needed.
+        // TODO: Qdrant's scroll endpoint: POST /collections/{name}/points/scroll
+        return []
+    }
 }
+
+/// The backend holds non-Sendable members (URLSession); we assert safe cross-actor use.
+extension EnhancedQdrantBackend: @unchecked Sendable {}

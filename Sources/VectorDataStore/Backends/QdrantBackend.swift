@@ -14,6 +14,8 @@ import FoundationNetworking
 	/// Supports both REST API and self-hosted Qdrant instances
 public final class QdrantBackend<Vector: VectorProtocol>: VectorDBBackend {
 
+
+
 	private let endpoint: URL
 	private let apiKey: String?
 	private let collectionName: String
@@ -259,4 +261,82 @@ public final class QdrantBackend<Vector: VectorProtocol>: VectorDBBackend {
 			throw QdrantError.networkError(error)
 		}
 	}
+
+	public func fetchAll() async throws -> [[String : String]] {
+		var allPayloads: [[String: String]] = []
+		var nextOffset: Any? = nil
+
+		repeat {
+			let url = endpoint.appendingPathComponent("collections/\(collectionName)/points/scroll")
+			var request = URLRequest(url: url)
+			request.httpMethod = "POST"
+			request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+			if let apiKey = apiKey {
+				request.setValue(apiKey, forHTTPHeaderField: "api-key")
+			}
+
+			var body: [String: Any] = [
+				"with_payload": true,
+				"with_vector": false,
+				"limit": 1000
+			]
+
+			if let offset = nextOffset {
+				body["offset"] = offset
+			}
+
+			guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+				throw QdrantError.encodingError
+			}
+
+			request.httpBody = jsonData
+
+			do {
+				let (data, response) = try await session.data(for: request)
+
+				guard let httpResponse = response as? HTTPURLResponse else {
+					throw QdrantError.invalidResponse
+				}
+
+				if httpResponse.statusCode == 404 {
+					throw QdrantError.collectionNotFound
+				}
+
+				if httpResponse.statusCode != 200 {
+					let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+					throw QdrantError.httpError(statusCode: httpResponse.statusCode, message: message)
+				}
+
+				// Expected response:
+				// { "result": { "points": [ { "id": ..., "payload": {...} } ], "next_page_offset": <id or null> }, ... }
+				guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+					  let result = json["result"] as? [String: Any],
+					  let points = result["points"] as? [[String: Any]] else {
+					throw QdrantError.decodingError(NSError(domain: "QdrantBackend", code: -2))
+				}
+
+				for point in points {
+					if let payload = point["payload"] as? [String: Any] {
+						allPayloads.append(payload.compactMapValues { String(describing: $0) })
+					}
+				}
+
+				if let offset = result["next_page_offset"] {
+					nextOffset = (offset is NSNull) ? nil : offset
+				} else {
+					nextOffset = nil
+				}
+			} catch let error as QdrantError {
+				throw error
+			} catch {
+				throw QdrantError.networkError(error)
+			}
+		} while nextOffset != nil
+
+		return allPayloads
+	}
 }
+
+	// URLSession is not strictly Sendable; mark unchecked conformance for the backend class.
+extension QdrantBackend: @unchecked Sendable {}

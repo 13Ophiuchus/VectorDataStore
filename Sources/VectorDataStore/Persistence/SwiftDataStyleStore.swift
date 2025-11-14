@@ -11,7 +11,7 @@ import SwiftData
 
 /// Actor that wraps the low-level `VectorDataStore` but exposes
 /// SwiftData-style request/result types.
-public actor SwiftDataStyleStore<Model: PersistentModel> {
+public actor SwiftDataStyleStore<Model: PersistentVectorModel> {
     public typealias ModelType = Model
 
     public let config: DataStoreConfiguration<[Float]>
@@ -53,7 +53,7 @@ public actor SwiftDataStyleStore<Model: PersistentModel> {
                 snaps = sort(snaps, by: sortDescriptors)
             }
 
-            return DataStoreFetchResult(snapshots: [snaps])
+            return DataStoreFetchResult(snapshots: snaps)
         } else {
             let allMetadata = try await getBackend().fetchAll()
             var models = allMetadata.compactMap(Model.init(metadata:))
@@ -71,7 +71,7 @@ public actor SwiftDataStyleStore<Model: PersistentModel> {
                 snaps = Array(snaps.prefix(limit))
             }
 
-            return DataStoreFetchResult(snapshots: [snaps])
+            return DataStoreFetchResult(snapshots: snaps)
         }
     }
 

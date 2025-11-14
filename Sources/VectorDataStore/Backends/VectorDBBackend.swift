@@ -7,30 +7,23 @@
 
 import Foundation
 
-	// MARK: - Updated VectorDBBackend Protocol ------------------------------------
+// MARK: - VectorDBBackend Protocol
 
 public protocol VectorDBBackend: Sendable {
-	associatedtype Vector: VectorProtocol
+    associatedtype Vector: VectorProtocol
 
-		/// Write or update vectors.
-	func upsert(_ payloads: [VectorPayload<Vector>]) async throws
+    /// Write or update vectors with metadata.
+    func upsert(_ payloads: [VectorPayload<Vector>]) async throws
 
-		/// Nearest-neighbour search.
-	func search(vector: Vector, topK: Int, threshold: Float?) async throws -> [[String: String]]
+    /// Nearest-neighbour search.
+    func search(vector: Vector, topK: Int, threshold: Float?) async throws -> [[String: String]]
 
-		/// Delete vectors by IDs.
-		/// - Parameter ids: Array of document IDs to delete
-		/// - Throws: Backend-specific errors (network, not found, etc.)
-	func delete(ids: [String]) async throws
+    /// Delete vectors by IDs.
+    /// - Parameter ids: Array of document IDs to delete
+    /// - Throws: Backend-specific errors (network, not found, etc.)
+    func delete(ids: [String]) async throws
 
-		/// Optional: Fetch all documents (for metadata-only filtering)
-		/// Default implementation returns empty array
-	func fetchAll() async throws -> [[String: String]]
-}
-
-	// Default implementation for fetchAll (backwards compatibility)
-extension VectorDBBackend {
-	public func fetchAll() async throws -> [[String: String]] {
-		return []
-	}
+    /// Optional: Fetch all documents (for metadata-only filtering)
+    /// Default implementation returns empty array
+    func fetchAll() async throws -> [[String: String]]
 }

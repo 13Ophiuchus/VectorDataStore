@@ -1,20 +1,20 @@
 //
-// MemoryBackend.swift
-// VectorDataStore
+//  MemoryBackend.swift
+//  VectorDataStore
 //
-// Created by Nicholas Reich on 10/21/25.
+//  Created by Nicholas Reich on 10/21/25.
 //
 
 import Foundation
 
 /// In-memory vector storage backend
 /// Thread-safe using NSLock for synchronization
-public final class MemoryBackend: VectorDBBackend {
+public final class MemoryBackend<Vector: VectorProtocol>: VectorDBBackend {
 
-    public typealias Vector = [Float]
+
 
     private struct Entry: Sendable {
-        let vector: [Float]
+        let vector: Vector
         let meta: [String: String]
     }
 
@@ -26,7 +26,15 @@ public final class MemoryBackend: VectorDBBackend {
 
     // MARK: - VectorDBBackend Protocol Implementation
 
-    public func upsert(_ payloads: [VectorPayload<[Float]>]) async throws {
+    // Temporary conformance stub to match protocols that still require [Vector].
+    // Delegates to the payload-based implementation using empty metadata.
+    public func upsert(_ payloads: [Vector]) async throws {
+        let wrapped = payloads.map { VectorPayload(vector: $0, metadata: [:]) }
+        try await upsert(wrapped)
+    }
+
+    // Preferred payload-based API used throughout the package.
+    public func upsert(_ payloads: [VectorPayload<Vector>]) async throws {
         lock.withLock {
             for p in payloads {
                 // Remove existing entry with same ID
@@ -39,7 +47,7 @@ public final class MemoryBackend: VectorDBBackend {
         }
     }
 
-    public func search(vector: [Float], topK: Int, threshold: Float?) async throws -> [[String: String]] {
+    public func search(vector: Vector, topK: Int, threshold: Float?) async throws -> [[String: String]] {
         let scored = lock.withLock {
             storage.map { e in
                 let d = e.vector.l2distance(to: vector)
